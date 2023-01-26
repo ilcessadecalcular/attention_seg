@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 
+
 class Unet_backbone(nn.Module):
     """(convolution => [BN] => ReLU)"""
 
@@ -82,36 +83,6 @@ class Res2net_backbone(nn.Module):
         return out
 
 
-def layer_block_resnet(in_channels: int,
-                       out_channels: int,
-                       baseWidth: int,
-                       init_feature: int,
-                       scale: int,
-                       blocks: int,
-                       ) -> nn.Sequential:
-    layers = []
-    layers.append(
-        Res2net_backbone(
-            in_channels = in_channels,
-            out_channels = out_channels,
-            baseWidth = baseWidth,
-            init_feature = init_feature,
-            scale = scale
-        )
-    )
-    for _ in range(1, blocks):
-        layers.append(
-            Res2net_backbone(
-                in_channels = out_channels,
-                out_channels = out_channels,
-                baseWidth = baseWidth,
-                init_feature = init_feature,
-                scale = scale
-            )
-        )
-    return nn.Sequential(*layers)
-
-
 class Down_resnet(nn.Module):
     """Downscaling with maxpool then double conv"""
 
@@ -128,13 +99,96 @@ class Down_resnet(nn.Module):
             nn.Conv2d(in_channels, out_channels, kernel_size = 2, stride = 2, padding = 0, bias = False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace = True),
-            layer_block_resnet(in_channels = out_channels,
-                               out_channels = out_channels,
-                               baseWidth = baseWidth,
-                               init_feature = init_feature,
-                               scale = scale,
-                               blocks = blocks)
+            self.layer_block_resnet(in_channels = out_channels,
+                                    out_channels = out_channels,
+                                    baseWidth = baseWidth,
+                                    init_feature = init_feature,
+                                    scale = scale,
+                                    blocks = blocks)
         )
+
+    def layer_block_resnet(self, in_channels: int,
+                           out_channels: int,
+                           baseWidth: int,
+                           init_feature: int,
+                           scale: int,
+                           blocks: int,
+                           ):
+        layers = []
+        layers.append(
+            Res2net_backbone(
+                in_channels = in_channels,
+                out_channels = out_channels,
+                baseWidth = baseWidth,
+                init_feature = init_feature,
+                scale = scale
+            )
+        )
+        for _ in range(1, blocks):
+            layers.append(
+                Res2net_backbone(
+                    in_channels = out_channels,
+                    out_channels = out_channels,
+                    baseWidth = baseWidth,
+                    init_feature = init_feature,
+                    scale = scale
+                )
+            )
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.maxpool_conv(x)
+
+
+class First_resnet(nn.Module):
+    """Downscaling with maxpool then double conv"""
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 baseWidth: int,
+                 init_feature: int,
+                 scale: int,
+                 blocks: int,
+                 ) -> None:
+        super().__init__()
+        self.maxpool_conv = nn.Sequential(
+            self.layer_block_resnet(in_channels = out_channels,
+                                    out_channels = out_channels,
+                                    baseWidth = baseWidth,
+                                    init_feature = init_feature,
+                                    scale = scale,
+                                    blocks = blocks)
+        )
+
+    def layer_block_resnet(self, in_channels: int,
+                           out_channels: int,
+                           baseWidth: int,
+                           init_feature: int,
+                           scale: int,
+                           blocks: int,
+                           ):
+        layers = []
+        layers.append(
+            Res2net_backbone(
+                in_channels = in_channels,
+                out_channels = out_channels,
+                baseWidth = baseWidth,
+                init_feature = init_feature,
+                scale = scale
+            )
+        )
+        for _ in range(1, blocks):
+            layers.append(
+                Res2net_backbone(
+                    in_channels = out_channels,
+                    out_channels = out_channels,
+                    baseWidth = baseWidth,
+                    init_feature = init_feature,
+                    scale = scale
+                )
+            )
+        return nn.Sequential(*layers)
 
     def forward(self, x):
         return self.maxpool_conv(x)
