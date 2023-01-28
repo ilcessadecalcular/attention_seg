@@ -10,7 +10,7 @@ import argparse
 "model：目前使用模型，每一层都有skip_feature，但大小固定，由hidden_size决定,还是不行啊，内存太大了"
 "model2：为初始模型，每一层都有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
 "model3：改变了一下，最上面一层没有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
-
+""
 class FeatureExtractor_resnet(nn.Module):
     '''
     Returns base network to extract visual features from image
@@ -299,14 +299,14 @@ def get_args_parser():
     #                     choices = ['sum', 'concat', 'mul', 'none'])
     # parser.add_argument('-hidden_size', dest = 'hidden_size', default = 128, type = int)
 
-    parser.add_argument('--init_feature', dest = 'init_feature', default = 64, type = int)
+    parser.add_argument('--init_feature', dest = 'init_feature', default = 128, type = int)
     parser.add_argument('--scale', dest = 'scale', default = 3, type = int)
     parser.add_argument('--baseWidth', dest = 'baseWidth', default = 18, type = int)
     parser.add_argument('--block_num', dest = 'block_num', default = 3, type = int)
     parser.add_argument('--down_num', dest = 'down_num', default = 3, type = int)
     parser.add_argument('--kernel_size', dest = 'kernel_size', default = 3, type = int)
     parser.add_argument('--dropout', dest = 'dropout', default = 0.0, type = float)
-    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 64, type = int)
+    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 16, type = int)
 
     return parser
 
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     print(out.shape)
 
     model_all = Rvosnet(args)
-    al = torch.ones((4, 15, 1, 192, 256))
+    al = torch.ones((1, 60, 1, 384, 256))
     n_parameters1 = sum(p.numel() for p in model_all.parameters() if p.requires_grad)
     # stat(model_all, input_size = (5,1, 256, 256))
     print('number of params (M): %.2f' % (n_parameters1 / 1.e6))

@@ -247,13 +247,17 @@ class Rvosnet(nn.Module):
         n, t, c, h, w = x.size()
         prev_hidden_temporal = None
         out_mask_list = []
+        x = x[0, :, :, :, :]
+        print(x.shape)
+        feats = self.encoder(x)
+        feats = feats.unsqueeze(0)
         for i in range(t):
             print(i)
-            input = x[:, i, :, :, :]
-            feats = self.encoder(input)
+            input = feats[:, i, :, :, :]
+            # feats = self.encoder(input)
             hidden_temporal = prev_hidden_temporal
 
-            out_mask, hidden = self.decoder(feats, hidden_temporal)
+            out_mask, hidden = self.decoder(input, hidden_temporal)
             out_mask_list.append(out_mask)
             prev_hidden_temporal = hidden
 
@@ -306,7 +310,7 @@ def get_args_parser():
     parser.add_argument('--down_num', dest = 'down_num', default = 3, type = int)
     parser.add_argument('--kernel_size', dest = 'kernel_size', default = 3, type = int)
     parser.add_argument('--dropout', dest = 'dropout', default = 0.0, type = float)
-    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 64, type = int)
+    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 16, type = int)
 
     return parser
 
@@ -329,7 +333,7 @@ if __name__ == "__main__":
     print(out.shape)
 
     model_all = Rvosnet(args)
-    al = torch.ones((4, 15, 1, 192, 256))
+    al = torch.ones((1, 20, 1, 384, 256))
     n_parameters1 = sum(p.numel() for p in model_all.parameters() if p.requires_grad)
     # stat(model_all, input_size = (5,1, 256, 256))
     print('number of params (M): %.2f' % (n_parameters1 / 1.e6))

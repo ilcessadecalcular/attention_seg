@@ -6,11 +6,9 @@ from torchstat import stat
 from model_part import *
 from clstm import ConvLSTMCell
 import argparse
-
-"model：目前使用模型，每一层都有skip_feature，但大小固定，由hidden_size决定,还是不行啊，内存太大了"
-"model2：为初始模型，每一层都有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
-"model3：改变了一下，最上面一层没有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
-
+import random
+"skip_feature 根据模型大小随时变化，这个内存太大了，因此改变一下" \
+""
 class FeatureExtractor_resnet(nn.Module):
     '''
     Returns base network to extract visual features from image
@@ -23,7 +21,7 @@ class FeatureExtractor_resnet(nn.Module):
         self.skip_convs_list = nn.ModuleList()
         self.skip_bns_list = nn.ModuleList()
         self.feature_dim = args.init_feature
-        self.hidden_size = args.hidden_size
+        self.width = args.baseWidth
         for i in range(self.layer_num):
             if i == 0:
                 encoder_i = nn.Sequential(
@@ -34,10 +32,15 @@ class FeatureExtractor_resnet(nn.Module):
                                  init_feature = args.init_feature,
                                  scale = args.scale,
                                  blocks = args.block_num)
+                    # layer_block_resnet(in_channels = self.feature_dim,
+                    #                    out_channels = self.feature_dim,
+                    #                    baseWidth = args.baseWidth,
+                    #                    init_feature = args.init_feature,
+                    #                    scale = args.scale,
+                    #                    blocks = args.block_num)
                 )
-                skip_conv_i = nn.Conv2d(self.feature_dim, self.hidden_size, kernel_size = 3, padding = 1)
-                skip_bn_i = nn.BatchNorm2d(self.hidden_size)
             else:
+                self.width = self.width * 2
                 encoder_i = Down_resnet(in_channels = self.feature_dim,
                                         out_channels = self.feature_dim * 2,
                                         baseWidth = args.baseWidth,
@@ -46,14 +49,16 @@ class FeatureExtractor_resnet(nn.Module):
                                         blocks = args.block_num,
                                         )
                 self.feature_dim = self.feature_dim * 2
-                skip_conv_i = nn.Conv2d(self.feature_dim, self.hidden_size*2, kernel_size = 3, padding = 1)
-                skip_bn_i = nn.BatchNorm2d(self.hidden_size*2)
+                skip_conv_i = nn.Conv2d(self.feature_dim, self.width, kernel_size = 3, padding = 1)
+                skip_bn_i = nn.BatchNorm2d(self.width)
+                self.skip_convs_list.append(skip_conv_i)
+                self.skip_bns_list.append(skip_bn_i)
+
             self.layer_list.append(encoder_i)
-            self.skip_convs_list.append(skip_conv_i)
-            self.skip_bns_list.append(skip_bn_i)
 
     def forward(self, x):
         feature_list = []
+        skip_feature_list = []
         input_feature = x
 
         for i in range(self.layer_num):
@@ -61,9 +66,13 @@ class FeatureExtractor_resnet(nn.Module):
             feature_list.append(feature)
             input_feature = feature
         for i in range(self.layer_num):
-            feature_list[i] = self.skip_bns_list[i](self.skip_convs_list[i](feature_list[i]))
+            if i == 0:
+                skip_feature = None
+            else:
+                skip_feature = self.skip_bns_list[i - 1](self.skip_convs_list[i - 1](feature_list[i]))
+                skip_feature_list.append(skip_feature)
 
-        return feature_list[::-1]
+        return skip_feature_list[::-1]
 
 
 class RSIS(nn.Module):
@@ -74,8 +83,6 @@ class RSIS(nn.Module):
     def __init__(self, args):
 
         super(RSIS, self).__init__()
-
-
         self.kernel_size = args.kernel_size
         padding = 0 if self.kernel_size == 1 else 1
         self.dropout = args.dropout
@@ -87,59 +94,26 @@ class RSIS(nn.Module):
         # initialize layers for each deconv stage
         self.clstm_list = nn.ModuleList()
         self.upsample_list = nn.ModuleList()
-        self.hidden_size = args.hidden_size
-
-        # skip_dims_list = []
-        # for i in range(self.layer_num):
-        #     if i == self.layer_num - 1:
-        #         skip_dims = self.hidden_size
-        #     else:
-        #         skip_dims = self.hidden_size *2
-        #     skip_dims_list.append(skip_dims)
-
-
-        # self.baseWidth = args.baseWidth
-        # clstm_in_dim = self.baseWidth * 2
-        # clstm_out_dim = self.baseWidth
-        # upsample_dim = self.baseWidth
+        self.baseWidth = args.baseWidth
+        clstm_in_dim = self.baseWidth * 4
+        clstm_out_dim = self.baseWidth * 2
+        upsample_dim = self.baseWidth
         # 4 is the number of deconv steps that we need to reach image size in the output
-        # for i in range(self.layer_num):
-        #     if i == self.layer_num - 1:
-        #         clstm_in_dim //= 2
-        #         clstm_i = ConvLSTMCell(args, clstm_in_dim, clstm_out_dim, self.kernel_size, padding = padding)
-        #     else:
-        #         clstm_i = ConvLSTMCell(args, clstm_in_dim, clstm_out_dim, self.kernel_size, padding = padding)
-        #         clstm_in_dim *= 2
-        #         clstm_out_dim *= 2
-        #     self.clstm_list.append(clstm_i)
-
-        for i in range(self.layer_num):
-            if i == 0:
-                clstm_i = ConvLSTMCell(args, self.hidden_size*2, self.hidden_size*2, self.kernel_size, padding = padding)
-            else:
-                if i == self.layer_num-1:
-                    clstm_i= ConvLSTMCell(args, self.hidden_size*2, self.hidden_size, self.kernel_size, padding = padding)
-                else:
-                    if i == self.layer_num-2:
-                        clstm_i= ConvLSTMCell(args, self.hidden_size*4, self.hidden_size, self.kernel_size, padding = padding)
-                    else:
-                        clstm_i = ConvLSTMCell(args, self.hidden_size*4, self.hidden_size*2, self.kernel_size, padding = padding)
-            self.clstm_list.append(clstm_i)
-
-        # for i in range(self.layer_num-1):
-        #     upsample_i = nn.ConvTranspose2d(upsample_dim * 2, upsample_dim, kernel_size = 2, stride = 2)
-        #     upsample_dim *= 2
-        #     self.upsample_list.append(upsample_i)
-
         for i in range(self.layer_num-1):
-            if i == self.layer_num-2:
-                upsample_i = nn.ConvTranspose2d(self.hidden_size, self.hidden_size, kernel_size = 2, stride = 2)
+            if i == self.layer_num - 2:
+                clstm_in_dim //= 2
+                clstm_i = ConvLSTMCell(args, clstm_in_dim, clstm_out_dim, self.kernel_size, padding = padding)
             else:
-                upsample_i = nn.ConvTranspose2d(self.hidden_size*2, self.hidden_size*2, kernel_size = 2, stride = 2)
+                clstm_i = ConvLSTMCell(args, clstm_in_dim, clstm_out_dim, self.kernel_size, padding = padding)
+                clstm_in_dim *= 2
+                clstm_out_dim *= 2
+            self.clstm_list.append(clstm_i)
+        for i in range(self.layer_num - 1):
+            upsample_i = nn.ConvTranspose2d(upsample_dim * 2, upsample_dim, kernel_size = 2, stride = 2)
+            upsample_dim *= 2
             self.upsample_list.append(upsample_i)
-
-        # self.clstm_list = self.clstm_list[::-1]
-        # self.upsample_list = self.upsample_list[::-1]
+        self.clstm_list = self.clstm_list[::-1]
+        self.upsample_list = self.upsample_list[::-1]
         # for i in range(len(skip_dims_out)):
         #     if i == 0:
         #         clstm_in_dim = self.hidden_size
@@ -151,7 +125,7 @@ class RSIS(nn.Module):
         #     clstm_i = ConvLSTMCell(args, clstm_in_dim, skip_dims_out[i], self.kernel_size, padding = padding)
         #     self.clstm_list.append(clstm_i)
 
-        self.conv_out = nn.Conv2d(self.hidden_size, 1, self.kernel_size, padding = padding)
+        self.conv_out = nn.Conv2d(self.baseWidth, 1, self.kernel_size, padding = padding)
 
         # calculate the dimensionality of classification vector
         # side class activations are taken from the output of the convlstm
@@ -167,7 +141,7 @@ class RSIS(nn.Module):
         skip_feats = feature_list[1:]
         hidden_list = []
 
-        for i in range(self.layer_num):
+        for i in range(self.layer_num-1):
             if prev_hidden_temporal is None:
                 state = self.clstm_list[i](clstm_in, None)
 
@@ -207,7 +181,7 @@ class RSIS(nn.Module):
             # hidden = upsample(hidden)
 
             # apply skip connection
-            if i < self.layer_num - 1:
+            if i < self.layer_num - 2:
                 skip_vec = skip_feats[i]
                 upsample = self.upsample_list[i]
                 # upsample = nn.ConvTranspose2d(hidden.size()[-3], skip_vec.size()[-3], kernel_size = 2, stride = 2)
@@ -227,7 +201,8 @@ class RSIS(nn.Module):
                 #     raise Exception('Skip connection mode not supported !')
             else:
                 # self.upsample = nn.UpsamplingBilinear2d(size = (hidden.size()[-2] * 2, hidden.size()[-1] * 2))
-                # hidden = self.upsample(hidden)
+                upsample = self.upsample_list[i]
+                hidden = upsample(hidden)
                 clstm_in = hidden
 
         out_mask = self.conv_out(clstm_in)
@@ -247,15 +222,26 @@ class Rvosnet(nn.Module):
         n, t, c, h, w = x.size()
         prev_hidden_temporal = None
         out_mask_list = []
+        # mask_list = list(range(t))
+        # print(mask_list)
+        # random.shuffle(mask_list)
+        # print(mask_list)
+        # mask_list = mask_list[:25]
+        # print(mask_list)
         for i in range(t):
-            print(i)
             input = x[:, i, :, :, :]
             feats = self.encoder(input)
             hidden_temporal = prev_hidden_temporal
-
+            del prev_hidden_temporal
+            print(i)
             out_mask, hidden = self.decoder(feats, hidden_temporal)
             out_mask_list.append(out_mask)
             prev_hidden_temporal = hidden
+            # del hidden
+            # if i in mask_list:
+            #     out_mask_list.append(out_mask)
+            # else:
+            #     del out_mask
 
         real_out_mask = torch.stack(out_mask_list, 1)
         return real_out_mask
@@ -299,16 +285,16 @@ def get_args_parser():
     #                     choices = ['sum', 'concat', 'mul', 'none'])
     # parser.add_argument('-hidden_size', dest = 'hidden_size', default = 128, type = int)
 
-    parser.add_argument('--init_feature', dest = 'init_feature', default = 64, type = int)
+    parser.add_argument('--init_feature', dest = 'init_feature', default = 32, type = int)
     parser.add_argument('--scale', dest = 'scale', default = 3, type = int)
     parser.add_argument('--baseWidth', dest = 'baseWidth', default = 18, type = int)
     parser.add_argument('--block_num', dest = 'block_num', default = 3, type = int)
     parser.add_argument('--down_num', dest = 'down_num', default = 3, type = int)
     parser.add_argument('--kernel_size', dest = 'kernel_size', default = 3, type = int)
     parser.add_argument('--dropout', dest = 'dropout', default = 0.0, type = float)
-    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 64, type = int)
 
     return parser
+
 
 if __name__ == "__main__":
     args = get_args_parser()
@@ -322,14 +308,13 @@ if __name__ == "__main__":
     n_parameters2 = sum(p.numel() for p in model_out.parameters() if p.requires_grad)
     print('number of params (M): %.2f' % (n_parameters2 / 1.e6))
     mid = model_in(t)
-
-    for i in range(4):
-        print(mid[i].shape)
     out, _ = model_out(mid, None)
+    for i in range(3):
+        print(mid[i].shape)
     print(out.shape)
 
     model_all = Rvosnet(args)
-    al = torch.ones((4, 15, 1, 192, 256))
+    al = torch.ones((1, 100, 1, 384, 256))
     n_parameters1 = sum(p.numel() for p in model_all.parameters() if p.requires_grad)
     # stat(model_all, input_size = (5,1, 256, 256))
     print('number of params (M): %.2f' % (n_parameters1 / 1.e6))

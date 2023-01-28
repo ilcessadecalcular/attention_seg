@@ -6,10 +6,14 @@ from torchstat import stat
 from model_part import *
 from clstm import ConvLSTMCell
 import argparse
+from simplernn import *
+
 
 "model：目前使用模型，每一层都有skip_feature，但大小固定，由hidden_size决定,还是不行啊，内存太大了"
 "model2：为初始模型，每一层都有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
 "model3：改变了一下，最上面一层没有skip_feature，并且skip_feature大小随模型大小变化，内存太大"
+"model4：改变了一下，只在最后一层lstm，内存太大"
+"model5：每一层都有skip_feature，但大小固定，由hidden_size决定,用简单rnn"
 
 class FeatureExtractor_resnet(nn.Module):
     '''
@@ -114,16 +118,14 @@ class RSIS(nn.Module):
         #     self.clstm_list.append(clstm_i)
 
         for i in range(self.layer_num):
-            if i == 0:
-                clstm_i = ConvLSTMCell(args, self.hidden_size*2, self.hidden_size*2, self.kernel_size, padding = padding)
+            if i == self.layer_num-1:
+                clstm_i = ResidualBlocksWithInputConv(args, self.hidden_size*3, self.hidden_size, num_blocks = 1)
             else:
-                if i == self.layer_num-1:
-                    clstm_i= ConvLSTMCell(args, self.hidden_size*2, self.hidden_size, self.kernel_size, padding = padding)
+                if i ==0:
+                    clstm_i = ResidualBlocksWithInputConv(args, self.hidden_size*4, self.hidden_size*2, num_blocks = 1)
                 else:
-                    if i == self.layer_num-2:
-                        clstm_i= ConvLSTMCell(args, self.hidden_size*4, self.hidden_size, self.kernel_size, padding = padding)
-                    else:
-                        clstm_i = ConvLSTMCell(args, self.hidden_size*4, self.hidden_size*2, self.kernel_size, padding = padding)
+                    clstm_i = ResidualBlocksWithInputConv(args, self.hidden_size * 6, self.hidden_size * 2,
+                                                          num_blocks = 1)
             self.clstm_list.append(clstm_i)
 
         # for i in range(self.layer_num-1):
@@ -133,7 +135,7 @@ class RSIS(nn.Module):
 
         for i in range(self.layer_num-1):
             if i == self.layer_num-2:
-                upsample_i = nn.ConvTranspose2d(self.hidden_size, self.hidden_size, kernel_size = 2, stride = 2)
+                upsample_i = nn.ConvTranspose2d(self.hidden_size*2, self.hidden_size, kernel_size = 2, stride = 2)
             else:
                 upsample_i = nn.ConvTranspose2d(self.hidden_size*2, self.hidden_size*2, kernel_size = 2, stride = 2)
             self.upsample_list.append(upsample_i)
@@ -196,10 +198,10 @@ class RSIS(nn.Module):
             # # state = self.clstm_list[i](clstm_in, prev_hidden_temporal[i])
 
             hidden_list.append(state)
-            hidden = state[0]
+
 
             if self.dropout > 0:
-                hidden = nn.Dropout2d(self.dropout)(hidden)
+                hidden = nn.Dropout2d(self.dropout)(state)
 
             # skip_vec = skip_feats[i]
             # upsample = nn.ConvTranspose2d(hidden.size()[-3], skip_vec.size()[-3], kernel_size = 2, stride = 2)
@@ -212,7 +214,7 @@ class RSIS(nn.Module):
                 upsample = self.upsample_list[i]
                 # upsample = nn.ConvTranspose2d(hidden.size()[-3], skip_vec.size()[-3], kernel_size = 2, stride = 2)
                 # upsample = nn.UpsamplingBilinear2d(size = (skip_vec.size()[-2], skip_vec.size()[-1]))
-                hidden = upsample(hidden)
+                hidden = upsample(state)
                 clstm_in = torch.cat([hidden, skip_vec], 1)
                 # # skip connection
                 # if self.skip_mode == 'concat':
@@ -299,14 +301,14 @@ def get_args_parser():
     #                     choices = ['sum', 'concat', 'mul', 'none'])
     # parser.add_argument('-hidden_size', dest = 'hidden_size', default = 128, type = int)
 
-    parser.add_argument('--init_feature', dest = 'init_feature', default = 64, type = int)
+    parser.add_argument('--init_feature', dest = 'init_feature', default = 128, type = int)
     parser.add_argument('--scale', dest = 'scale', default = 3, type = int)
     parser.add_argument('--baseWidth', dest = 'baseWidth', default = 18, type = int)
     parser.add_argument('--block_num', dest = 'block_num', default = 3, type = int)
     parser.add_argument('--down_num', dest = 'down_num', default = 3, type = int)
     parser.add_argument('--kernel_size', dest = 'kernel_size', default = 3, type = int)
     parser.add_argument('--dropout', dest = 'dropout', default = 0.0, type = float)
-    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 64, type = int)
+    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 16, type = int)
 
     return parser
 
@@ -329,7 +331,7 @@ if __name__ == "__main__":
     print(out.shape)
 
     model_all = Rvosnet(args)
-    al = torch.ones((4, 15, 1, 192, 256))
+    al = torch.ones((4, 60, 1, 256, 256))
     n_parameters1 = sum(p.numel() for p in model_all.parameters() if p.requires_grad)
     # stat(model_all, input_size = (5,1, 256, 256))
     print('number of params (M): %.2f' % (n_parameters1 / 1.e6))

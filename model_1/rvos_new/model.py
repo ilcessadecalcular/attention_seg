@@ -1,16 +1,18 @@
 import torch
 import torch.nn as nn
-from .clstm import ConvLSTMCell, ConvLSTMCellMask
+from clstm import ConvLSTMCell, ConvLSTMCellMask
 import argparse
 import torch.nn.functional as f
 from torch.autograd import Variable
 from torchvision import transforms, models
 import torch.nn as nn
 import math
-from .vision import VGG16, ResNet34, ResNet50, ResNet101
+from vision import VGG16, ResNet34, ResNet50, ResNet101
 import sys
 sys.path.append("..")
 # from tools.utils import get_skip_dims
+from torchstat import stat
+
 
 def get_skip_dims(model_name):
     if model_name == 'resnet50' or model_name == 'resnet101':
@@ -225,3 +227,42 @@ class Rvosnet(nn.Module):
         return real_out_mask
 
 
+def get_args_parser():
+    parser = argparse.ArgumentParser('Medical segmentation ', add_help = False)
+    parser.add_argument('--cpu', dest = 'use_gpu', action = 'store_false')
+    parser.set_defaults(use_gpu = False)
+    parser.add_argument('-base_model', dest = 'base_model', default = 'resnet34',
+                        choices = ['resnet101', 'resnet50', 'resnet34', 'vgg16'])
+    parser.add_argument('-skip_mode', dest = 'skip_mode', default = 'concat',
+                        choices = ['sum', 'concat', 'mul', 'none'])
+    parser.add_argument('-hidden_size', dest = 'hidden_size', default = 128, type = int)
+    parser.add_argument('-kernel_size', dest = 'kernel_size', default = 3, type = int)
+    parser.add_argument('-dropout', dest = 'dropout', default = 0.0, type = float)
+
+    return parser
+
+
+if __name__ == "__main__":
+    args = get_args_parser()
+    args = args.parse_args()
+    t = torch.ones((10, 1, 384, 256))
+    model_in = FeatureExtractor(args)
+    model_out = RSIS(args)
+    n_parameters1 = sum(p.numel() for p in model_in.parameters() if p.requires_grad)
+    stat(model_in, input_size = (1, 384, 256))
+    print('number of params (M): %.2f' % (n_parameters1 / 1.e6))
+    n_parameters2 = sum(p.numel() for p in model_out.parameters() if p.requires_grad)
+    print('number of params (M): %.2f' % (n_parameters2 / 1.e6))
+    mid = model_in(t)
+    out, _ = model_out(mid, None)
+    for i in range(4):
+        print(mid[i].shape)
+    print(out.shape)
+
+    model_all = Rvosnet(args)
+    al = torch.ones((10, 60, 1, 256, 256))
+    n_parameters1 = sum(p.numel() for p in model_all.parameters() if p.requires_grad)
+    # stat(model_all, input_size = (5,1, 256, 256))
+    print('number of params (M): %.2f' % (n_parameters1 / 1.e6))
+    out_all = model_all(al)
+    print(out_all.shape)

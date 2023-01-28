@@ -135,3 +135,6 @@ if __name__ == "__main__":
     n_parameters1 = sum(p.numel() for p in model.parameters() if p.requires_grad)
     # n_parameters2 = sum(p.numel() for p in model2.parameters() if p.requires_grad)
     print('number of params (M): %.2f' % (n_parameters1 / 1.e6))
+    al = torch.ones((1, 1, 40, 384, 256))
+    out = model(al)
+    print(out.shape)
