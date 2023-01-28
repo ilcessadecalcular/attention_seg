@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Type, Any, Callable, Union, List, Optional
 from torchstat import stat
-from model_part import *
-from clstm import ConvLSTMCell
+from .model_part import *
+from .clstm import ConvLSTMCell
 import argparse
 
 "model：目前使用模型，每一层都有skip_feature，但大小固定，由hidden_size决定,还是不行啊，内存太大了"
@@ -248,7 +248,7 @@ class Rvosnet(nn.Module):
         prev_hidden_temporal = None
         out_mask_list = []
         for i in range(t):
-            print(i)
+            # print(i)
             input = x[:, i, :, :, :]
             feats = self.encoder(input)
             hidden_temporal = prev_hidden_temporal
@@ -260,6 +260,14 @@ class Rvosnet(nn.Module):
         real_out_mask = torch.stack(out_mask_list, 1)
         return real_out_mask
 
+    def init_weights(self):
+        #logger.info('=> init weights from normal distribution')
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, std = 0.01)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
 # if __name__ == "__main__":
 #     t = torch.ones((10, 1, 128, 128))

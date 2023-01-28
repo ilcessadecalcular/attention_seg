@@ -94,17 +94,17 @@ def get_args_parser():
 
     # Dataset parameters
 
-    parser.add_argument('--train_source_dir', default='train/source', type=str,
+    parser.add_argument('--train_source_dir', default='train1/source', type=str,
                         help='train source dir path')
-    parser.add_argument('--train_label_dir', default='train/label', type=str,
+    parser.add_argument('--train_label_dir', default='train1/label', type=str,
                         help='train label dir path')
-    parser.add_argument('--valid_source_dir', default='valid/source', type=str,
+    parser.add_argument('--valid_source_dir', default='valid1/source', type=str,
                         help='valid source dir path')
-    parser.add_argument('--valid_label_dir', default='valid/label', type=str,
+    parser.add_argument('--valid_label_dir', default='valid1/label', type=str,
                         help='valid label dir path')
-    parser.add_argument('--output_dir', default='./output_dir_without_attention_32f_18w',
+    parser.add_argument('--output_dir', default='./output_dir_without_attention_model_64f_40w_3s_64h',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='./output_dir_without_attention_32f_18w',
+    parser.add_argument('--log_dir', default='./output_dir_without_attention_model_64f_40w_3s_64h',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -142,14 +142,14 @@ def get_args_parser():
     #                     choices = ['sum', 'concat', 'mul', 'none'])
     # parser.add_argument('-hidden_size', dest = 'hidden_size', default = 128, type = int)
 
-    parser.add_argument('--init_feature', dest = 'init_feature', default = 32, type = int)
+    parser.add_argument('--init_feature', dest = 'init_feature', default = 64, type = int)
     parser.add_argument('--scale', dest = 'scale', default = 3, type = int)
-    parser.add_argument('--baseWidth', dest = 'baseWidth', default = 18, type = int)
-    parser.add_argument('--block_num', dest = 'block_num', default = 3, type = int)
+    parser.add_argument('--baseWidth', dest = 'baseWidth', default = 40, type = int)
+    parser.add_argument('--block_num', dest = 'block_num', default = 2, type = int)
     parser.add_argument('--down_num', dest = 'down_num', default = 3, type = int)
     parser.add_argument('--kernel_size', dest = 'kernel_size', default = 3, type = int)
     parser.add_argument('--dropout', dest = 'dropout', default = 0.0, type = float)
-
+    parser.add_argument('--hidden_size', dest = 'hidden_size', default = 64, type = int)
     return parser
 
 
